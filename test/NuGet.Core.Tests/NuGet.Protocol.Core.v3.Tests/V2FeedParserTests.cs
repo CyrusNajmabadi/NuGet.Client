@@ -90,6 +90,67 @@ namespace NuGet.Protocol.Core.v3.Tests
             Assert.Equal("aspnetcore50", latest.DependencySets.First().TargetFramework.GetShortFolderName());
         }
 
+        [Fact]
+        public async Task V2FeedParser_Search()
+        {
+            Func<Task<HttpHandlerResource>> factory = () =>
+               Task.FromResult<HttpHandlerResource>(new TestHttpHandler(new TestHandler()));
+
+            var httpSource = new HttpSource(
+                new Configuration.PackageSource("http://testsource/v2/"),
+                factory);
+
+            V2FeedParser parser = new V2FeedParser(httpSource, "http://testsource/v2/");
+            var searchFilter = new SearchFilter()
+            {
+                IncludePrerelease = false,
+                SupportedFrameworks = new string[] { "net40-Client" }
+            };
+            var packages = await parser.Search("azure", searchFilter, 0, 1, NullLogger.Instance, CancellationToken.None);
+            var package = packages.FirstOrDefault();
+
+            Assert.Equal("WindowsAzure.Storage", package.Id);
+            Assert.Equal("6.2.0", package.Version.ToNormalizedString());
+            Assert.Equal("WindowsAzure.Storage", package.Title);
+            Assert.Equal("Microsoft", String.Join(",", package.Authors));
+            Assert.Equal("", String.Join(",", package.Owners));
+            Assert.True(package.Description.StartsWith("This client library enables"));
+            Assert.Equal(3863927, package.DownloadCountAsInt);
+            Assert.Equal("https://www.nuget.org/api/v2/package/WindowsAzure.Storage/6.2.0", package.DownloadUrl);
+            Assert.Equal("http://go.microsoft.com/fwlink/?LinkID=288890", package.IconUrl);
+            Assert.Equal("http://go.microsoft.com/fwlink/?LinkId=331471", package.LicenseUrl);
+            Assert.Equal("http://go.microsoft.com/fwlink/?LinkId=235168", package.ProjectUrl);
+            Assert.Equal(DateTimeOffset.Parse("2015-12-10T22:39:05.103"), package.Published.Value);
+            Assert.Equal("https://www.nuget.org/package/ReportAbuse/WindowsAzure.Storage/6.2.0", package.ReportAbuseUrl);
+            Assert.True(package.RequireLicenseAcceptance);
+            Assert.Equal("A client library for working with Microsoft Azure storage services including blobs, files, tables, and queues.", package.Summary);
+            Assert.Equal("Microsoft Azure Storage Table Blob File Queue Scalable windowsazureofficial", package.Tags);
+            Assert.Equal("Microsoft.Data.OData:5.6.4:net40-Client|Newtonsoft.Json:6.0.8:net40-Client|Microsoft.Data.Services.Client:5.6.4:net40-Client|Microsoft.Azure.KeyVault.Core:1.0.0:net40-Client|Microsoft.Data.OData:5.6.4:win80|Newtonsoft.Json:6.0.8:win80|Microsoft.Data.OData:5.6.4:wpa|Newtonsoft.Json:6.0.8:wpa|Microsoft.Data.OData:5.6.4:wp80|Newtonsoft.Json:6.0.8:wp80|Microsoft.Azure.KeyVault.Core:1.0.0:wp80", package.Dependencies);
+            Assert.Equal(4, package.DependencySets.Count());
+            Assert.Equal("net40-client", package.DependencySets.First().TargetFramework.GetShortFolderName());
+        }
+
+        [Fact]
+        public async Task V2FeedParser_SearchTop100()
+        {
+            Func<Task<HttpHandlerResource>> factory = () =>
+              Task.FromResult<HttpHandlerResource>(new TestHttpHandler(new TestHandler()));
+
+            var httpSource = new HttpSource(
+                new Configuration.PackageSource("http://testsource/v2/"),
+                factory);
+
+            V2FeedParser parser = new V2FeedParser(httpSource, "http://testsource/v2/");
+            var searchFilter = new SearchFilter()
+            {
+                IncludePrerelease = false,
+                SupportedFrameworks = new string[] { "net40-Client" }
+            };
+            var packages = await parser.Search("azure", searchFilter, 0, 100, NullLogger.Instance, CancellationToken.None);
+
+            Assert.Equal(100, packages.Count());
+        }
+
 
         private class TestHandler : HttpClientHandler
         {
@@ -112,6 +173,14 @@ namespace NuGet.Protocol.Core.v3.Tests
                 else if (request.RequestUri.AbsoluteUri == "http://api.nuget.org/api/v2/FindPackagesById?id='ravendb.client'&$skiptoken='RavenDB.Client','2.5.2617-Unstable'")
                 {
                     msg.Content = new TestContent(FindPackagesByIdData.MultiPage3);
+                }
+                else if (request.RequestUri.AbsoluteUri == "http://testsource/v2/Search()?$filter=IsLatestVersion&searchTerm='azure'&targetFramework='net40-Client'&includePrerelease=false&$skip=0&$top=1")
+                {
+                    msg.Content = new TestContent(SearchData.SearchAzureData1);
+                }
+                else if (request.RequestUri.AbsoluteUri == "http://testsource/v2/Search()?$filter=IsLatestVersion&searchTerm='azure'&targetFramework='net40-Client'&includePrerelease=false&$skip=0&$top=100")
+                {
+                    msg.Content = new TestContent(SearchData.SearchAzureData100);
                 }
                 else
                 {

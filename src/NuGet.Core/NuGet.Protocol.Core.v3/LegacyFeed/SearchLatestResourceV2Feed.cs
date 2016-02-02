@@ -21,9 +21,11 @@ namespace NuGet.Protocol
             _feedParser = feedParser;
         }
 
-        public override async Task<IEnumerable<ServerPackageMetadata>> Search(string searchTerm, SearchFilter filters, int skip, int take, Logging.ILogger log, CancellationToken cancellationToken)
+        public override async Task<IEnumerable<ServerPackageMetadata>> Search(string searchTerm, SearchFilter filters, int skip, int take, Logging.ILogger log, CancellationToken token)
         {
-            var ListofPackageInfo = await _feedParser.Search(searchTerm, filters, skip, take, log, cancellationToken);
+            token.ThrowIfCancellationRequested();
+
+            var ListofPackageInfo = await _feedParser.Search(searchTerm, filters, skip, take, log, token);
 
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 

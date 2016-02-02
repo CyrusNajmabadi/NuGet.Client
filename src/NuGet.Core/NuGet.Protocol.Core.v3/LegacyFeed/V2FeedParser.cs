@@ -24,7 +24,7 @@ namespace NuGet.Protocol
         private const string MetadataNS = "http://schemas.microsoft.com/ado/2007/08/dataservices/metadata";
         private const string DataServicesNS = "http://schemas.microsoft.com/ado/2007/08/dataservices";
         private const string FindPackagesByIdFormat = "/FindPackagesById()?Id='{0}'";
-        private const string SearchEndPointFormat = "/Search()?$filter={0}&searchTerm='{1}'&targetFramework='{2}'&includePrerelease={3}$skip={4}&$top={5}";
+        private const string SearchEndPointFormat = "/Search()?$filter={0}&searchTerm='{1}'&targetFramework='{2}'&includePrerelease={3}&$skip={4}&$top={5}";
         private const string IsLatestVersionFilterFlag = "IsLatestVersion";
         private const string IsAbsoluteLatestVersionFilterFlag = "IsAbsoluteLatestVersion";
 
@@ -84,7 +84,7 @@ namespace NuGet.Protocol
             _httpSource = httpSource;
             _source = source;
             _findPackagesByIdFormat = source.Source.TrimEnd('/') + FindPackagesByIdFormat;
-            _searchEndPointFormat = source.Source.TrimEnd('/') + _searchEndPointFormat;
+            _searchEndPointFormat = source.Source.TrimEnd('/') + SearchEndPointFormat;
         }
 
         /// <summary>
@@ -119,11 +119,12 @@ namespace NuGet.Protocol
 
         public async Task<IEnumerable<V2FeedPackageInfo>> Search(string searchTerm, SearchFilter filters, int skip, int take, ILogger log, CancellationToken cancellationToken)
         {
+            var targetFramework = String.Join(@"/", filters.SupportedFrameworks);
             var uri = String.Format(CultureInfo.InvariantCulture, _searchEndPointFormat,
                                     filters.IncludePrerelease ? IsAbsoluteLatestVersionFilterFlag : IsLatestVersionFilterFlag,
                                     searchTerm,
-                                    filters.SupportedFrameworks,
-                                    filters.IncludePrerelease,
+                                    targetFramework,
+                                    filters.IncludePrerelease.ToString().ToLowerInvariant(),
                                     skip,
                                     take);
             return await QueryV2Feed(uri, null, log, cancellationToken);
