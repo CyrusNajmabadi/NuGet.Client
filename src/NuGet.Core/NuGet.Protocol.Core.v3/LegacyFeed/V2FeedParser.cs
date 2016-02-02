@@ -10,6 +10,7 @@ using System.Xml.Linq;
 using NuGet.Configuration;
 using NuGet.Logging;
 using NuGet.Packaging.Core;
+using NuGet.Protocol.Core.Types;
 using NuGet.Versioning;
 
 namespace NuGet.Protocol
@@ -23,6 +24,9 @@ namespace NuGet.Protocol
         private const string MetadataNS = "http://schemas.microsoft.com/ado/2007/08/dataservices/metadata";
         private const string DataServicesNS = "http://schemas.microsoft.com/ado/2007/08/dataservices";
         private const string FindPackagesByIdFormat = "/FindPackagesById()?Id='{0}'";
+        private const string SearchEndPointFormat = "/Search()?$filter={0}&searchTerm='{1}'&targetFramework='{2}'&includePrerelease={3}$skip={4}&$top={5}";
+        private const string IsLatestVersionFilterFlag = "IsLatestVersion";
+        private const string IsAbsoluteLatestVersionFilterFlag = "IsAbsoluteLatestVersion";
 
         // XNames used in the feed
         private static readonly XName _xnameEntry = XName.Get("entry", W3Atom);
@@ -47,10 +51,12 @@ namespace NuGet.Protocol
         private static readonly XName _xnameAuthor = XName.Get("author", W3Atom);
         private static readonly XName _xnamePackageHash = XName.Get("PackageHash", DataServicesNS);
         private static readonly XName _xnamePackageHashAlgorithm = XName.Get("PackageHashAlgorithm", DataServicesNS);
+        private static readonly XName _xnameMinClientVersion = XName.Get("MinClientVersion", DataServicesNS);
 
         private readonly HttpSource _httpSource;
         private readonly PackageSource _source;
         private readonly string _findPackagesByIdFormat;
+        private readonly string _searchEndPointFormat;
 
         public V2FeedParser(HttpSource httpSource, string sourceUrl)
             : this(httpSource, new PackageSource(sourceUrl))
@@ -78,6 +84,7 @@ namespace NuGet.Protocol
             _httpSource = httpSource;
             _source = source;
             _findPackagesByIdFormat = source.Source.TrimEnd('/') + FindPackagesByIdFormat;
+            _searchEndPointFormat = source.Source.TrimEnd('/') + _searchEndPointFormat;
         }
 
         /// <summary>
@@ -105,6 +112,128 @@ namespace NuGet.Protocol
             }
 
             var uri = String.Format(CultureInfo.InvariantCulture, _findPackagesByIdFormat, id);
+            return await QueryV2Feed(uri, id, log, token);
+        }
+
+
+
+        public async Task<IEnumerable<V2FeedPackageInfo>> Search(string searchTerm, SearchFilter filters, int skip, int take, ILogger log, CancellationToken cancellationToken)
+        {
+            var uri = String.Format(CultureInfo.InvariantCulture, _searchEndPointFormat,
+                                    filters.IncludePrerelease ? IsAbsoluteLatestVersionFilterFlag : IsLatestVersionFilterFlag,
+                                    searchTerm,
+                                    filters.SupportedFrameworks,
+                                    filters.IncludePrerelease,
+                                    skip,
+                                    take);
+            return await QueryV2Feed(uri, null, log, cancellationToken);
+        }
+
+        /// <summary>
+        /// Finds all entries on the page and parses them
+        /// </summary>
+        private IEnumerable<V2FeedPackageInfo> ParsePage(XDocument doc, string id)
+        {
+            var result = doc.Root
+                .Elements(_xnameEntry)
+                .Select(x => ParsePackage(id, x));
+
+            return result;
+        }
+
+        /// <summary>
+        /// Parse an entry into a V2FeedPackageInfo
+        /// </summary>
+        private V2FeedPackageInfo ParsePackage(string id, XElement element)
+        {
+            var properties = element.Element(_xnameProperties);
+            var idElement = properties.Element(_xnameId);
+            var titleElement = element.Element(_xnameTitle);
+
+            // If 'Id' element exist, use its value as accurate package Id
+            // Otherwise, use the value of 'title' if it exist
+            // Use the given Id as final fallback if all elements above don't exist
+            string identityId = idElement?.Value ?? titleElement?.Value ?? id;
+            string versionString = properties.Element(_xnameVersion).Value;
+            NuGetVersion version = NuGetVersion.Parse(versionString);
+            string downloadUrl = element.Element(_xnameContent).Attribute("src").Value;
+
+            string title = titleElement?.Value;
+            string summary = GetValue(element, _xnameSummary);
+            string description = GetValue(properties, _xnameDescription);
+            string iconUrl = GetValue(properties, _xnameIconUrl);
+            string licenseUrl = GetValue(properties, _xnameLicenseUrl);
+            string projectUrl = GetValue(properties, _xnameProjectUrl);
+            string reportAbuseUrl = GetValue(properties, _xnameReportAbuseUrl);
+            string tags = GetValue(properties, _xnameTags);
+            string dependencies = GetValue(properties, _xnameDependencies);
+
+            string downloadCount = GetValue(properties, _xnameDownloadCount);
+            bool requireLicenseAcceptance = GetValue(properties, _xnameRequireLicenseAcceptance) == "true";
+
+            string packageHash = GetValue(properties, _xnamePackageHash);
+            string packageHashAlgorithm = GetValue(properties, _xnamePackageHashAlgorithm);
+            string minClientVersionString = GetValue(properties, _xnameMinClientVersion);
+
+            NuGetVersion minClientVersion = null;
+
+            if (minClientVersionString != null)
+            {
+                NuGetVersion.TryParse(minClientVersionString, out minClientVersion);
+            }
+
+            DateTimeOffset? published = null;
+
+            DateTimeOffset pubVal = DateTimeOffset.MinValue;
+            string pubString = GetValue(properties, _xnamePublished);
+            if (DateTimeOffset.TryParse(pubString, out pubVal))
+            {
+                published = pubVal;
+            }
+
+            // TODO: is this ever populated in v2?
+            IEnumerable<string> owners = null;
+
+            IEnumerable<string> authors = null;
+
+            var authorNode = element.Element(_xnameAuthor);
+            if (authorNode != null)
+            {
+                authors = authorNode.Elements(_xnameName).Select(e => e.Value);
+            }
+
+            return new V2FeedPackageInfo(new PackageIdentity(identityId, version),
+                title, summary, description, authors, owners, iconUrl, licenseUrl,
+                projectUrl, reportAbuseUrl, tags, published, dependencies,
+                requireLicenseAcceptance, downloadUrl, downloadCount,
+                packageHash,
+                packageHashAlgorithm,
+                minClientVersion
+                );
+        }
+
+        /// <summary>
+        /// Retrieve an XML value safely
+        /// </summary>
+        private static string GetValue(XElement parent, XName childName)
+        {
+            string value = null;
+
+            if (parent != null)
+            {
+                XElement child = parent.Element(childName);
+
+                if (child != null)
+                {
+                    value = child.Value;
+                }
+            }
+
+            return value;
+        }
+
+        private async Task<List<V2FeedPackageInfo>> QueryV2Feed(string uri, string id, ILogger log, CancellationToken token)
+        {
             var results = new List<V2FeedPackageInfo>();
             var page = 1;
 
@@ -162,99 +291,6 @@ namespace NuGet.Protocol
             }
 
             return results;
-        }
-
-        /// <summary>
-        /// Finds all entries on the page and parses them
-        /// </summary>
-        private IEnumerable<V2FeedPackageInfo> ParsePage(XDocument doc, string id)
-        {
-            var result = doc.Root
-                .Elements(_xnameEntry)
-                .Select(x => ParsePackage(id, x));
-
-            return result;
-        }
-
-        /// <summary>
-        /// Parse an entry into a V2FeedPackageInfo
-        /// </summary>
-        private V2FeedPackageInfo ParsePackage(string id, XElement element)
-        {
-            var properties = element.Element(_xnameProperties);
-            var idElement = properties.Element(_xnameId);
-            var titleElement = element.Element(_xnameTitle);
-
-            // If 'Id' element exist, use its value as accurate package Id
-            // Otherwise, use the value of 'title' if it exist
-            // Use the given Id as final fallback if all elements above don't exist
-            string identityId = idElement?.Value ?? titleElement?.Value ?? id;
-            string versionString = properties.Element(_xnameVersion).Value;
-            NuGetVersion version = NuGetVersion.Parse(versionString);
-            string downloadUrl = element.Element(_xnameContent).Attribute("src").Value;
-
-            string title = titleElement?.Value;
-            string summary = GetValue(element, _xnameSummary);
-            string description = GetValue(properties, _xnameDescription);
-            string iconUrl = GetValue(properties, _xnameIconUrl);
-            string licenseUrl = GetValue(properties, _xnameLicenseUrl);
-            string projectUrl = GetValue(properties, _xnameProjectUrl);
-            string reportAbuseUrl = GetValue(properties, _xnameReportAbuseUrl);
-            string tags = GetValue(properties, _xnameTags);
-            string dependencies = GetValue(properties, _xnameDependencies);
-
-            string downloadCount = GetValue(properties, _xnameDownloadCount);
-            bool requireLicenseAcceptance = GetValue(properties, _xnameRequireLicenseAcceptance) == "true";
-
-            string packageHash = GetValue(properties, _xnamePackageHash);
-            string packageHashAlgorithm = GetValue(properties, _xnamePackageHashAlgorithm);
-
-            DateTimeOffset? published = null;
-
-            DateTimeOffset pubVal = DateTimeOffset.MinValue;
-            string pubString = GetValue(properties, _xnamePublished);
-            if (DateTimeOffset.TryParse(pubString, out pubVal))
-            {
-                published = pubVal;
-            }
-
-            // TODO: is this ever populated in v2?
-            IEnumerable<string> owners = null;
-
-            IEnumerable<string> authors = null;
-
-            var authorNode = element.Element(_xnameAuthor);
-            if (authorNode != null)
-            {
-                authors = authorNode.Elements(_xnameName).Select(e => e.Value);
-            }
-
-            return new V2FeedPackageInfo(new PackageIdentity(identityId, version),
-                title, summary, description, authors, owners, iconUrl, licenseUrl,
-                projectUrl, reportAbuseUrl, tags, published, dependencies,
-                requireLicenseAcceptance, downloadUrl, downloadCount,
-                packageHash,
-                packageHashAlgorithm);
-        }
-
-        /// <summary>
-        /// Retrieve an XML value safely
-        /// </summary>
-        private static string GetValue(XElement parent, XName childName)
-        {
-            string value = null;
-
-            if (parent != null)
-            {
-                XElement child = parent.Element(childName);
-
-                if (child != null)
-                {
-                    value = child.Value;
-                }
-            }
-
-            return value;
         }
     }
 }

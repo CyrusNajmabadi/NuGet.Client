@@ -32,11 +32,12 @@ namespace NuGet.Protocol
         private readonly string _downloadUrl;
         private readonly string _packageHash;
         private readonly string _packageHashAlgorithm;
+        private readonly NuGetVersion _minClientVersion;
 
         public V2FeedPackageInfo(PackageIdentity identity, string title, string summary, string description, IEnumerable<string> authors, IEnumerable<string> owners,
             string iconUrl, string licenseUrl, string projectUrl, string reportAbuseUrl,
             string tags, DateTimeOffset? published, string dependencies, bool requireLicenseAccept, string downloadUrl, string downloadCount,
-            string packageHash, string packageHashAlgorithm)
+            string packageHash, string packageHashAlgorithm, NuGetVersion minClientVersion)
             : base(identity.Id, identity.Version)
         {
             _summary = summary;
@@ -58,6 +59,7 @@ namespace NuGet.Protocol
             _published = published;
             _packageHash = packageHash;
             _packageHashAlgorithm = packageHashAlgorithm;
+            _minClientVersion = minClientVersion;
         }
 
         public string Title
@@ -262,6 +264,14 @@ namespace NuGet.Protocol
             get
             {
                 return _packageHashAlgorithm;
+            }
+        }
+
+        public NuGetVersion MinClientVersion
+        {
+            get
+            {
+                return _minClientVersion;
             }
         }
     }
