@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Linq;
 using NuGet.Logging;
+using NuGet.Packaging.Core;
 using NuGet.Protocol.Core.Types;
 using NuGet.Versioning;
 using Test.Utility;
@@ -89,6 +90,57 @@ namespace NuGet.Protocol.Core.v3.Tests
             Assert.Equal(6, latest.DependencySets.Count());
             Assert.Equal("aspnetcore50", latest.DependencySets.First().TargetFramework.GetShortFolderName());
         }
+
+        [Fact]
+        public async Task V2FeedParser_DownloadFromUrl()
+        {
+            Func<Task<HttpHandlerResource>> factory = () =>
+                Task.FromResult<HttpHandlerResource>(new TestHttpHandler(new HttpClientHandler()));
+
+            var httpSource = new HttpSource(
+                new Configuration.PackageSource("https://www.nuget.org/api/v2/"),
+                factory);
+
+            V2FeedParser parser = new V2FeedParser(httpSource, "https://www.nuget.org/api/v2/");
+
+            using(var downloadResult = await parser.DownloadFromUrl(new PackageIdentity("WindowsAzure.Storage", new NuGetVersion("6.2.0")),
+                                                              new Uri("https://www.nuget.org/api/v2/package/WindowsAzure.Storage/6.2.0"),
+                                                              Configuration.NullSettings.Instance,
+                                                              NullLogger.Instance, 
+                                                              CancellationToken.None))
+            {
+                var packageReader = downloadResult.PackageReader;
+                var files = packageReader.GetFiles();
+
+                Assert.Equal(11, files.Count());
+            }
+        }
+
+        [Fact]
+        public async Task V2FeedParser_DownloadFromIdentity()
+        {
+            Func<Task<HttpHandlerResource>> factory = () =>
+                Task.FromResult<HttpHandlerResource>(new TestHttpHandler(new HttpClientHandler()));
+
+            var httpSource = new HttpSource(
+                new Configuration.PackageSource("https://www.nuget.org/api/v2/"),
+                factory);
+
+            V2FeedParser parser = new V2FeedParser(httpSource, "https://www.nuget.org/api/v2/");
+
+            using (var downloadResult = await parser.DownloadFromIdentity(new PackageIdentity("WindowsAzure.Storage", new NuGetVersion("6.2.0")),
+                                                              Configuration.NullSettings.Instance,
+                                                              NullLogger.Instance,
+                                                              CancellationToken.None))
+            {
+                var packageReader = downloadResult.PackageReader;
+                var files = packageReader.GetFiles();
+
+                Assert.Equal(11, files.Count());
+            }
+        }
+
+
 
         [Fact]
         public async Task V2FeedParser_Search()
