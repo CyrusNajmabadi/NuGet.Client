@@ -115,8 +115,6 @@ namespace NuGet.Protocol
             return await QueryV2Feed(uri, id, log, token);
         }
 
-
-
         public async Task<IEnumerable<V2FeedPackageInfo>> Search(string searchTerm, SearchFilter filters, int skip, int take, ILogger log, CancellationToken cancellationToken)
         {
             var targetFramework = String.Join(@"/", filters.SupportedFrameworks);
@@ -128,6 +126,24 @@ namespace NuGet.Protocol
                                     skip,
                                     take);
             return await QueryV2Feed(uri, null, log, cancellationToken);
+        }
+
+        public async Task<DownloadResourceResult> DownloadFromUrl(PackageIdentity package, 
+            Uri downloadUri, 
+            ISettings settings,
+            ILogger log,
+            CancellationToken token)
+        {
+            return await GetDownloadResultUtility.GetDownloadResultAsync(_httpSource, package, downloadUri, settings, log, token);
+        }
+
+        public async Task<DownloadResourceResult> DownloadFromIdentity(PackageIdentity package,
+            ISettings settings,
+            ILogger log,
+            CancellationToken token)
+        {
+            var packageInfo = await GetPackage(package, log, token);
+            return await GetDownloadResultUtility.GetDownloadResultAsync(_httpSource, package, new Uri(packageInfo.DownloadUrl), settings, log, token);
         }
 
         /// <summary>

@@ -21,7 +21,7 @@ namespace NuGet.Protocol
                 var httpSource = HttpSource.Create(source);
                 var parser = new V2FeedParser(httpSource, source.PackageSource);
 
-                resource = new MetadataV2FeedResource(parser);
+                resource = new MetadataResourceV2Feed(parser);
             }
 
             return Task.FromResult(new Tuple<bool, INuGetResource>(resource != null, resource));

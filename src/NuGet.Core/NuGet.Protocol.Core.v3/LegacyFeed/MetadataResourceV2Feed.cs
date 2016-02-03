@@ -10,11 +10,11 @@ using NuGet.Versioning;
 
 namespace NuGet.Protocol
 {
-    public class MetadataV2FeedResource : MetadataResource
+    public class MetadataResourceV2Feed : MetadataResource
     {
         private readonly V2FeedParser _feedParser;
 
-        public MetadataV2FeedResource(V2FeedParser feedParser)
+        public MetadataResourceV2Feed(V2FeedParser feedParser)
         {
             if (_feedParser == null)
             {

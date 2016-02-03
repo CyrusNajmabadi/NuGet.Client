@@ -7,11 +7,11 @@ using NuGet.Protocol.Core.Types;
 
 namespace NuGet.Protocol
 {
-    public class SearchLatestV2FeedResource : SearchLatestResource
+    public class SearchLatestResourceV2Feed : SearchLatestResource
     {
         private readonly V2FeedParser _feedParser;
 
-        public SearchLatestV2FeedResource(V2FeedParser feedParser)
+        public SearchLatestResourceV2Feed(V2FeedParser feedParser)
         {
             if (_feedParser == null)
             {
