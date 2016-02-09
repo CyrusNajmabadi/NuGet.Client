@@ -19,7 +19,7 @@ namespace NuGet.Protocol
 
         public DependencyInfoResourceV2Feed(V2FeedParser feedParser, SourceRepository source)
         {
-            if (_feedParser == null)
+            if (feedParser == null)
             {
                 throw new ArgumentNullException(nameof(feedParser));
             }
@@ -28,13 +28,17 @@ namespace NuGet.Protocol
             _source = source;
         }
 
-        public override Task<SourcePackageDependencyInfo> ResolvePackage(
+        public override async Task<SourcePackageDependencyInfo> ResolvePackage(
             PackageIdentity package,
             NuGetFramework projectFramework,
             ILogger log,
             CancellationToken token)
         {
-            throw new NotImplementedException();
+            token.ThrowIfCancellationRequested();
+
+            var packages = await _feedParser.FindPackagesByIdAsync(package.Id, log, token);
+
+            return CreateDependencyInfo(packages.Where(p => p.Version.Equals(package.Version)).FirstOrDefault(), projectFramework);
         }
 
         public override async Task<IEnumerable<SourcePackageDependencyInfo>> ResolvePackages(

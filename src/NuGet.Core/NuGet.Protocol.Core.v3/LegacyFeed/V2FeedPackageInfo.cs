@@ -219,9 +219,17 @@ namespace NuGet.Protocol
                     {
                         string[] parts = set.Split(':');
 
-                        if (parts.Length == 3)
+                        if (parts.Length == 3 || parts.Length == 2)
                         {
-                            var framework = NuGetFramework.Parse(parts[2]);
+                            NuGetFramework framework = null;
+                            if (parts.Length == 3)
+                            {
+                               framework = NuGetFramework.Parse(parts[2]);
+                            }
+                            else
+                            {
+                                framework = NuGetFramework.AnyFramework;
+                            }
 
                             List<PackageDependency> deps = null;
                             if (!results.TryGetValue(framework, out deps))
