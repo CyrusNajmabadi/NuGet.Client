@@ -71,7 +71,7 @@ namespace NuGet.Protocol
             _retryHandler = new HttpRetryHandler();
         }
 
-        internal Task<HttpSourceResult> GetAsync(string uri,
+        public Task<HttpSourceResult> GetAsync(string uri,
             string cacheKey,
             HttpSourceCacheContext context,
             ILogger log,
@@ -83,7 +83,7 @@ namespace NuGet.Protocol
         /// <summary>
         /// Caching Get request.
         /// </summary>
-        internal async Task<HttpSourceResult> GetAsync(string uri,
+        public async Task<HttpSourceResult> GetAsync(string uri,
             string cacheKey,
             HttpSourceCacheContext cacheContext,
             ILogger log,
@@ -133,7 +133,7 @@ namespace NuGet.Protocol
         /// Wraps logging of the initial request and throttling.
         /// This method does not use the cache.
         /// </summary>
-        internal async Task<HttpResponseMessage> SendAsync(
+        public async Task<HttpResponseMessage> SendAsync(
             Func<HttpRequestMessage> requestFactory,
             CancellationToken cancellationToken)
         {
@@ -169,7 +169,7 @@ namespace NuGet.Protocol
             }
         }
 
-        public Task<HttpResponseMessage> GetAsync(Uri uri, ILogger log, CancellationToken token)
+        private Task<HttpResponseMessage> GetAsync(Uri uri, ILogger log, CancellationToken token)
         {
             log.LogInformation(string.Format(CultureInfo.InvariantCulture, _requestLogFormat, "GET", uri));
 
